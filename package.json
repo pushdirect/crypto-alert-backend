@@ -1,0 +1,19 @@
+{
+  "name": "pushdirect-crypto-alerts",
+  "version": "1.0.0",
+  "description": "Free crypto alert system for pushdirect.network",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.16.0",
+    "node-fetch": "^3.3.2",
+    "cors": "^2.8.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
