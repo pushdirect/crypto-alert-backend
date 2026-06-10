@@ -37,9 +37,14 @@ class AlertEngine extends EventEmitter {
       if (s.volumes.length >= 24) {
         s.baselineVol = s.volumes.slice(-24).reduce((a, b) => a + b, 0) / 24;
       }
-
       this._checkPriceBreakout(asset, event, s);
       this._checkVolumeSpike(asset, event, s);
+      this._checkVolatility(asset, event, s);
+    }
+
+    // 1m klines: fast price-breakout check for BTC/ETH/SOL using 1m candle
+    if (type === 'kline_1m') {
+      this._checkPriceBreakout(asset, event, s);
       this._checkVolatility(asset, event, s);
     }
 
@@ -139,23 +144,47 @@ class AlertEngine extends EventEmitter {
   }
 
   _checkCoinGeckoSignals(asset, event) {
-    // Multi-timeframe signals from CoinGecko REST data
-    const { change_1h, change_24h } = event;
+    const { change_1h, change_24h, price_usd } = event;
+    const fmt = (p) => p ? '$'+p.toLocaleString('en-US',{maximumFractionDigits:4}) : '—';
 
-    // 1h move check (CoinGecko data, not Binance kline)
+    // 1h move: fire at ≥1.5% (medium) or ≥3% (high)
     if (change_1h !== undefined && change_1h !== null) {
-      if (Math.abs(change_1h) >= 5) {
-        const ck = `${asset}:cg_1h:5`;
+      const abs1h = Math.abs(change_1h);
+      if (abs1h >= 1.5) {
+        const tier = abs1h >= 5 ? 'high' : abs1h >= 3 ? 'medium' : 'low';
+        const ck = `${asset}:cg_1h:${tier}`;
         if (!this._onCooldown(ck)) {
-          this._setCooldown(ck, 60 * 60 * 1000);
+          this._setCooldown(ck, tier === 'high' ? 60*60*1000 : 30*60*1000);
           const dir = change_1h > 0 ? '▲' : '▼';
           this._fireAlert({
             type: 'price_breakout',
             asset,
-            severity: Math.abs(change_1h) >= 10 ? 'high' : 'medium',
-            title: `${asset} ${dir} ${Math.abs(change_1h).toFixed(1)}% in 1h`,
-            body: `${asset} is ${dir === '▲' ? 'up' : 'down'} ${Math.abs(change_1h).toFixed(1)}% in the last hour. Current price: $${event.price_usd?.toLocaleString('en-US', { maximumFractionDigits: 4 })}.`,
-            data: { change_1h, price: event.price_usd },
+            severity: tier,
+            title: `${asset} ${dir} ${abs1h.toFixed(1)}% in 1h`,
+            body: `${asset} moved ${dir} ${abs1h.toFixed(1)}% over the last hour. Now trading at ${fmt(price_usd)}.`,
+            data: { pctChange: change_1h, price: price_usd, window: '1h' },
+            source: 'coingecko',
+          });
+        }
+      }
+    }
+
+    // 24h move: fire at ≥5% (medium) or ≥10% (high)
+    if (change_24h !== undefined && change_24h !== null) {
+      const abs24h = Math.abs(change_24h);
+      if (abs24h >= 5) {
+        const tier = abs24h >= 15 ? 'critical' : abs24h >= 10 ? 'high' : 'medium';
+        const ck = `${asset}:cg_24h:${tier}`;
+        if (!this._onCooldown(ck)) {
+          this._setCooldown(ck, 4*60*60*1000);
+          const dir = change_24h > 0 ? '▲' : '▼';
+          this._fireAlert({
+            type: 'price_breakout',
+            asset,
+            severity: tier,
+            title: `${asset} ${dir} ${abs24h.toFixed(1)}% in 24h`,
+            body: `${asset} is ${abs24h.toFixed(1)}% ${dir === '▲' ? 'higher' : 'lower'} over 24 hours. Trading at ${fmt(price_usd)}.`,
+            data: { pctChange: change_24h, price: price_usd, window: '24h' },
             source: 'coingecko',
           });
         }
