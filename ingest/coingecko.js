@@ -88,7 +88,20 @@ class CoinGeckoIngest {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const data = await res.json();
-      const coins = (data.coins || []).slice(0, 7).map(c => c.item.symbol.toUpperCase());
+      const coins = (data.coins || []).slice(0, 7).map(c => {
+        const it = c.item || {};
+        const dd = it.data || {};
+        return {
+          symbol:    (it.symbol || '').toUpperCase(),
+          name:      it.name || it.symbol || '',
+          rank:      (typeof it.market_cap_rank === 'number') ? it.market_cap_rank : null,
+          price:     (typeof dd.price === 'number') ? dd.price : null,
+          change24h: (dd.price_change_percentage_24h && typeof dd.price_change_percentage_24h.usd === 'number')
+                       ? dd.price_change_percentage_24h.usd : null,
+          volume:    dd.total_volume || null,   // pre-formatted "$..." string from CoinGecko
+          marketCap: dd.market_cap || null,
+        };
+      }).filter(c => c.symbol);
 
       if (coins.length > 0) {
         this.engine.processEvent({
@@ -97,7 +110,7 @@ class CoinGeckoIngest {
           coins,
           ts: Date.now(),
         });
-        console.log(`[CoinGecko] Trending: ${coins.join(', ')}`);
+        console.log(`[CoinGecko] Trending: ${coins.map(c => c.symbol).join(', ')}`);
       }
     } catch (err) {
       console.error('[CoinGecko] Trending poll error:', err.message);
