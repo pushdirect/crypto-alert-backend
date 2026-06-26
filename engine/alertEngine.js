@@ -54,13 +54,16 @@ class AlertEngine extends EventEmitter {
     }
 
     if (type === 'trending') {
+      const list = Array.isArray(event.coins) ? event.coins : [];
+      const syms = list.map(c => (typeof c === 'string' ? c : c.symbol)).filter(Boolean);
+      const top = syms.slice(0, 3);
       this._fireAlert({
         type: 'trending',
-        asset: event.coins.slice(0, 3).join(', '),
+        asset: top.join(', '),
         severity: 'low',
-        title: `Trending: ${event.coins.slice(0, 3).join(' · ')}`,
-        body: `These coins are trending on CoinGecko right now — social volume spiking.`,
-        data: { coins: event.coins },
+        title: `Trending: ${top.join(' · ')}`,
+        body: `These coins are trending on CoinGecko right now — social and search volume spiking.`,
+        data: { coins: list },
         source: 'coingecko',
       });
     }
